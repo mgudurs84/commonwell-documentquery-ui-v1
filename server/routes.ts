@@ -1,8 +1,39 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import https from "https";
+import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import { BASE_URLS, type QueryParameters, insertQueryHistorySchema } from "@shared/schema";
 import { z } from "zod";
+
+function getHttpsAgent(): https.Agent | undefined {
+  const certPath = process.env.CLIENT_CERT_PATH;
+  const keyPath = process.env.CLIENT_KEY_PATH;
+  const caPath = process.env.CA_CERT_PATH;
+
+  if (!certPath || !keyPath) {
+    console.warn("Client certificate not configured. Set CLIENT_CERT_PATH and CLIENT_KEY_PATH environment variables for mTLS.");
+    return undefined;
+  }
+
+  try {
+    const agentOptions: https.AgentOptions = {
+      cert: fs.readFileSync(path.resolve(certPath)),
+      key: fs.readFileSync(path.resolve(keyPath)),
+      rejectUnauthorized: true,
+    };
+
+    if (caPath) {
+      agentOptions.ca = fs.readFileSync(path.resolve(caPath));
+    }
+
+    return new https.Agent(agentOptions);
+  } catch (error: any) {
+    console.error("Failed to load client certificates:", error.message);
+    return undefined;
+  }
+}
 
 const queryParamsSchema = z.object({
   environment: z.enum(["integration", "production"]),
@@ -109,10 +140,59 @@ export async function registerRoutes(
       const startTime = Date.now();
 
       try {
+        const httpsAgent = getHttpsAgent();
+        
+        const fetchWithAgent = (url: string, options: any): Promise<Response> => {
+          if (!httpsAgent) {
+            return fetch(url, options);
+          }
+          
+          return new Promise((resolve, reject) => {
+            const urlObj = new URL(url);
+            const reqOptions: https.RequestOptions = {
+              hostname: urlObj.hostname,
+              port: urlObj.port || 443,
+              path: urlObj.pathname + urlObj.search,
+              method: options.method || "GET",
+              headers: options.headers,
+              agent: httpsAgent,
+              timeout: 55000,
+            };
+
+            const req = https.request(reqOptions, (res) => {
+              let data = "";
+              res.on("data", (chunk) => (data += chunk));
+              res.on("end", () => {
+                const response = new Response(data, {
+                  status: res.statusCode || 500,
+                  statusText: res.statusMessage || "Error",
+                  headers: res.headers as any,
+                });
+                resolve(response);
+              });
+            });
+
+            req.on("error", reject);
+            req.on("timeout", () => {
+              req.destroy();
+              reject(new Error("Request timeout"));
+            });
+
+            if (options.signal) {
+              options.signal.addEventListener("abort", () => {
+                req.destroy();
+                reject(new DOMException("Aborted", "AbortError"));
+              });
+            }
+
+            req.end();
+          });
+        };
+
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 55000);
 
-        const response = await fetch(queryUrl, {
+        const response = await fetchWithAgent(queryUrl, {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${params.jwtToken}`,

@@ -8,6 +8,7 @@ This is an internal testing tool for querying the CommonWell Health Alliance FHI
 - **Node.js** 18.x or higher (20.x recommended)
 - **npm** 9.x or higher
 - A valid **JWT token** for CommonWell API access
+- **Client Certificate** (.pem/.crt) and **Private Key** (.key) for mTLS authentication (required for Integration environment)
 
 ## Quick Start (Windows)
 
@@ -33,12 +34,43 @@ The project uses `cross-env` for cross-platform environment variables. Update yo
 }
 ```
 
-### 4. Start the Development Server
+### 4. Configure Client Certificates (Required for Integration API)
+
+CommonWell's Integration environment requires **mutual TLS (mTLS)**. You must provide your client certificate files.
+
+Create a `.env` file in the project root (or set environment variables) with paths to your certificate files:
+
+**Windows (PowerShell):**
+```powershell
+$env:CLIENT_CERT_PATH = "C:\path\to\your\client-cert.pem"
+$env:CLIENT_KEY_PATH = "C:\path\to\your\client-key.pem"
+$env:CA_CERT_PATH = "C:\path\to\your\ca-cert.pem"  # Optional
+npm run dev
+```
+
+**Windows (Command Prompt):**
+```cmd
+set CLIENT_CERT_PATH=C:\path\to\your\client-cert.pem
+set CLIENT_KEY_PATH=C:\path\to\your\client-key.pem
+set CA_CERT_PATH=C:\path\to\your\ca-cert.pem
+npm run dev
+```
+
+**Or create a batch file (run-local.bat):**
+```batch
+@echo off
+set CLIENT_CERT_PATH=C:\certs\client-cert.pem
+set CLIENT_KEY_PATH=C:\certs\client-key.pem
+set CA_CERT_PATH=C:\certs\ca-cert.pem
+npm run dev
+```
+
+### 5. Start the Development Server
 ```bash
 npm run dev
 ```
 
-### 5. Open in Browser
+### 6. Open in Browser
 Navigate to: **http://localhost:5000**
 
 ## Production Build
@@ -111,8 +143,19 @@ Per CommonWell Specification V4.4 Appendix B:
 
 ## Troubleshooting
 
+### "No client certificate on connection" Error (401)
+This error means CommonWell requires mTLS authentication. You must:
+1. Set the `CLIENT_CERT_PATH` and `CLIENT_KEY_PATH` environment variables
+2. Ensure the certificate files are valid and not expired
+3. Verify the certificate is registered with CommonWell for your organization
+
 ### "NODE_ENV is not recognized" Error (Windows)
 Make sure you've updated the scripts to use `cross-env` as shown above.
+
+### "Failed to load client certificates" Error
+- Check that the file paths are correct and accessible
+- Ensure the certificate files are in PEM format
+- Verify file permissions allow reading
 
 ### Connection Timeout
 CommonWell queries may take up to 50 seconds. The tool has a 55-second timeout configured.
