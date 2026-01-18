@@ -4,7 +4,7 @@ REM Update the paths below to point to your client certificate files
 
 REM ============================================================
 REM CONFIGURE YOUR CERTIFICATE PATHS HERE
-REM ============================================================
+REM ============================================================  
 set CLIENT_CERT_PATH=C:\path\to\your\client-cert.pem
 set CLIENT_KEY_PATH=C:\path\to\your\client-key.pem
 set CA_CERT_PATH=C:\path\to\your\ca-cert.pem
